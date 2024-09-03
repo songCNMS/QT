@@ -157,7 +157,7 @@ class Trainer:
         if self.reprogram is not None:
             self.reprogram.eval()
         for eval_fn in self.eval_fns:
-            outputs = eval_fn(self.actor, self.critic_target, self.reprogram, self.llm_model)
+            outputs = eval_fn(self.actor, self.critic_target, self.reprogram, self.llm_model, self.desc_reg)
             for k, v in outputs.items():
                 logs[f'evaluation/{k}'] = v
 
@@ -203,7 +203,7 @@ class Trainer:
             states = self.reprogram(num_states, self.llm_model.word_embeddings, self.llm_model.word_embeddings)
             if self.desc_reg:
                 emb_states = ori_states[:, :, self.reprogram.num_state_dim:]
-                emb_states = self.reprogram.final_linear_layer(emb_states)
+                # emb_states = self.reprogram.final_linear_layer(emb_states)
                 emb_loss = ((emb_states-states)**2)[attention_mask > 0].mean()
                 
         

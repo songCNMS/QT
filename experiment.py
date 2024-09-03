@@ -250,7 +250,7 @@ def experiment(
     
     if variant["reprogram"]:
         num_state_dim = env_state_dim
-        re_state_dim = 256
+        re_state_dim = 768
         state_dim = re_state_dim
         data_state_dim = num_state_dim + 768
         reprogram_model = ReprogrammingLayer(num_state_dim, re_state_dim, 768, device)
@@ -325,7 +325,7 @@ def experiment(
         return s, a, r, target_a, d, rtg, timesteps, mask
 
     def eval_episodes(target_rew):
-        def fn(model, critic, reprogram_model, llm_model):
+        def fn(model, critic, reprogram_model, llm_model, desc_reg):
             returns, lengths = [], []
             for _ in range(num_eval_episodes):
                 with torch.no_grad():
@@ -337,6 +337,7 @@ def experiment(
                         critic,
                         reprogram_model,
                         llm_model,
+                        desc_reg=desc_reg,
                         max_ep_len=max_ep_len,
                         scale=variant['test_scale'],
                         target_return=[t/variant['test_scale'] for t in target_rew],
@@ -429,6 +430,7 @@ def experiment(
                 'epoch': iter+1,
                 'actor': trainer.actor.state_dict(),
                 'critic': trainer.critic_target.state_dict(),
+                'reprogram': trainer.reprogram.state_dict(),
             }
             save_checkpoint(state, os.path.join(variant['save_path'], exp_prefix, 'epoch_{}.pth'.format(iter + 1)))
             best_ret = ret

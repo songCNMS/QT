@@ -112,12 +112,13 @@ def evaluate_episode_rtg(
     with torch.no_grad():
         for t in range(max_ep_len):
             if desc_reg:
-                act_states = torch.nn.F.pad(states, (0, 768), "constant", 0)
+                act_states = torch.nn.functional.pad(states, (0, 768), "constant", 0)
+            else:
+                act_states = states
             act_states = (act_states.to(dtype=torch.float32) - state_mean) / state_std
             if reprogram is not None:
-                # if desc_reg:
-                    # act_states = torch.nn.F.pad(act_states, (0, 768), "constant", 0)
-                act_states = reprogram(act_states.reshape(1, states.shape[0], states.shape[1]), llm_model.word_embeddings, llm_model.word_embeddings)[0, :, :]
+                act_states = act_states.reshape(1, act_states.shape[0], act_states.shape[1])[:, :, :state_dim]
+                act_states = reprogram(act_states, llm_model.word_embeddings, llm_model.word_embeddings)[0, :, :]
     
             action = model.get_action(
                 critic,

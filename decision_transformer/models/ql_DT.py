@@ -24,7 +24,7 @@ class ReprogrammingLayer(nn.Module):
         self.value_projection = nn.Linear(self.d_llm, self.d_keys * self.n_heads)
         self.out_projection = nn.Linear(self.d_keys * self.n_heads, self.d_llm)
         self.final_linear_layer = nn.Sequential(
-                                    nn.Linear(self.d_llm, 512),
+                                    nn.Linear(num_state_dim, 512),
                                     nn.Mish(),
                                     nn.Linear(512, 256),
                                     nn.Mish(),
@@ -35,17 +35,18 @@ class ReprogrammingLayer(nn.Module):
         
 
     def forward(self, target_embedding, source_embedding, value_embedding):
-        B, L, _ = target_embedding.shape
-        S, _ = source_embedding.shape
-        H = self.n_heads
+        return self.final_linear_layer(target_embedding)
+        # B, L, _ = target_embedding.shape
+        # S, _ = source_embedding.shape
+        # H = self.n_heads
 
-        target_embedding = self.query_projection(target_embedding).view(B, L, H, -1)
-        source_embedding = self.key_projection(source_embedding).view(S, H, -1)
-        value_embedding = self.value_projection(value_embedding).view(S, H, -1)
-        out = self.reprogramming(target_embedding, source_embedding, value_embedding)
-        out = out.reshape(B, L, -1)
+        # target_embedding = self.query_projection(target_embedding).view(B, L, H, -1)
+        # source_embedding = self.key_projection(source_embedding).view(S, H, -1)
+        # value_embedding = self.value_projection(value_embedding).view(S, H, -1)
+        # out = self.reprogramming(target_embedding, source_embedding, value_embedding)
+        # out = out.reshape(B, L, -1)
         
-        return self.final_linear_layer(self.out_projection(out))
+        # return self.final_linear_layer(self.out_projection(out))
 
     def reprogramming(self, target_embedding, source_embedding, value_embedding):
         B, L, H, E = target_embedding.shape
