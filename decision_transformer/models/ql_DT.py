@@ -4,13 +4,67 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 import transformers
-
+from math import sqrt
 from decision_transformer.models.model import TrajectoryModel
 from decision_transformer.models.trajectory_gpt2 import GPT2Model
+
+
+class ReprogrammingLayer(nn.Module):
+    def __init__(self, num_state_dim, state_dim, d_model, device, attention_dropout=0.1):
+        super(ReprogrammingLayer, self).__init__()
+
+        self.d_keys = num_state_dim
+        self.n_heads = 12
+        self.d_llm = d_model
+        self.num_state_dim = num_state_dim
+        self.state_dim = state_dim
+        
+        self.query_projection = nn.Linear(num_state_dim, self.d_keys * self.n_heads)
+        self.key_projection = nn.Linear(self.d_llm, self.d_keys * self.n_heads)
+        self.value_projection = nn.Linear(self.d_llm, self.d_keys * self.n_heads)
+        self.out_projection = nn.Linear(self.d_keys * self.n_heads, self.d_llm)
+        self.final_linear_layer = nn.Sequential(
+                                    nn.Linear(self.d_llm, 512),
+                                    nn.ReLU(),
+                                    nn.Linear(512, 256),
+                                    nn.ReLU(),
+                                    nn.Linear(256, self.state_dim)
+        )
+        self.dropout = nn.Dropout(attention_dropout)
+        self.device = device
+        
+
+    def forward(self, target_embedding, source_embedding, value_embedding):
+        B, L, _ = target_embedding.shape
+        S, _ = source_embedding.shape
+        H = self.n_heads
+
+        target_embedding = self.query_projection(target_embedding).view(B, L, H, -1)
+        source_embedding = self.key_projection(source_embedding).view(S, H, -1)
+        value_embedding = self.value_projection(value_embedding).view(S, H, -1)
+        out = self.reprogramming(target_embedding, source_embedding, value_embedding)
+        out = out.reshape(B, L, -1)
+        
+        return self.final_linear_layer(self.out_projection(out))
+
+    def reprogramming(self, target_embedding, source_embedding, value_embedding):
+        B, L, H, E = target_embedding.shape
+
+        scale = 1.0 / sqrt(E)
+
+        scores = torch.einsum("blhe,she->bhls", target_embedding, source_embedding)
+
+        A = self.dropout(torch.softmax(scale * scores, dim=-1))
+        reprogramming_embedding = torch.einsum("bhls,she->blhe", A, value_embedding)
+
+        return reprogramming_embedding
+    
 
 class Critic(nn.Module):
     def __init__(self, state_dim, action_dim, hidden_dim=256):
         super(Critic, self).__init__()
+        # self.reprogram_model = reprogram_model
+        # self.word_embddings=word_embeddings
         self.q1_model = nn.Sequential(nn.Linear(state_dim + action_dim, hidden_dim),
                                       nn.Mish(),
                                       nn.Linear(hidden_dim, hidden_dim),
@@ -28,10 +82,22 @@ class Critic(nn.Module):
                                       nn.Linear(hidden_dim, 1))
 
     def forward(self, state, action):
+        # if self.reprogram_model is not None:
+        #     if len(state.shape) == 2:
+        #         state = state.reshape(state.shape[0], -1, state.shape[1])
+        #     state = self.reprogram_model(state, self.word_embddings, self.word_embddings)
+        #     if len(action.shape) == 2:
+        #         state = state.reshape(state.shape[0], -1)
         x = torch.cat([state, action], dim=-1)
         return self.q1_model(x), self.q2_model(x)
 
     def q1(self, state, action):
+        # if self.reprogram_model is not None:
+        #     if len(state.shape) == 2:
+        #         state = state.reshape(state.shape[0], -1, state.shape[1])
+        #     state = self.reprogram_model(state, self.word_embddings, self.word_embddings)
+        #     if len(action.shape) == 2:
+        #         state = state.reshape(state.shape[0], -1)
         x = torch.cat([state, action], dim=-1)
         return self.q1_model(x)
 
@@ -50,6 +116,8 @@ class DecisionTransformer(TrajectoryModel):
             self,
             state_dim,
             act_dim,
+            # reprogram_model,
+            # word_embeddings,
             hidden_size,
             max_length=None,
             max_ep_len=4096,
@@ -66,6 +134,7 @@ class DecisionTransformer(TrajectoryModel):
         config = transformers.GPT2Config(
             vocab_size=1,  # doesn't matter -- we don't use the vocab
             n_embd=hidden_size,
+            n_ctx=60,
             **kwargs
         )
         self.config = config
@@ -73,6 +142,7 @@ class DecisionTransformer(TrajectoryModel):
         self.scale = scale
         self.rtg_no_q = rtg_no_q
         self.infer_no_q = infer_no_q
+        
 
         # note: the only difference between this GPT2Model and the default Huggingface version
         # is that the positional embeddings are removed (since we'll add those ourselves)
@@ -83,6 +153,8 @@ class DecisionTransformer(TrajectoryModel):
         self.embed_rewards = torch.nn.Linear(1, hidden_size)
         self.embed_state = torch.nn.Linear(self.state_dim, hidden_size)
         self.embed_action = torch.nn.Linear(self.act_dim, hidden_size)
+        # self.reprogram_model = reprogram_model
+        # self.word_embeddings=word_embeddings
 
         self.embed_ln = nn.LayerNorm(hidden_size)
 
@@ -95,6 +167,9 @@ class DecisionTransformer(TrajectoryModel):
 
     def forward(self, states, actions, rewards=None, targets=None, returns_to_go=None, timesteps=None, attention_mask=None):
 
+        # if self.reprogram_model is not None:
+        #     states = self.reprogram_model(states, self.word_embeddings, self.word_embeddings)
+
         batch_size, seq_length = states.shape[0], states.shape[1]
 
         if attention_mask is None:
@@ -102,6 +177,7 @@ class DecisionTransformer(TrajectoryModel):
             attention_mask = torch.ones((batch_size, seq_length), dtype=torch.long, device=states.device)
 
         # embed each modality with a different head
+        
         state_embeddings = self.embed_state(states)
         action_embeddings = self.embed_action(actions)
         returns_embeddings = self.embed_return(returns_to_go)

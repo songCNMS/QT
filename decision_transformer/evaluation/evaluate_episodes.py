@@ -71,6 +71,8 @@ def evaluate_episode_rtg(
         act_dim,
         model,
         critic,
+        reprogram,
+        llm_model,
         max_ep_len=2000,
         scale=1000.,
         state_mean=0.,
@@ -87,6 +89,8 @@ def evaluate_episode_rtg(
     state_std = torch.from_numpy(state_std).to(device=device)
 
     state = env.reset()
+    
+    
     if mode == 'noise':
         state = state + np.random.normal(0, 0.1, size=state.shape)
 
@@ -107,9 +111,13 @@ def evaluate_episode_rtg(
     episode_return, episode_length = 0, 0
     with torch.no_grad():
         for t in range(max_ep_len):
+            act_states = (states.to(dtype=torch.float32) - state_mean) / state_std
+            if reprogram is not None:
+                act_states = reprogram(act_states.reshape(1, states.shape[0], states.shape[1]), llm_model.word_embeddings, llm_model.word_embeddings)[0, :, :]
+    
             action = model.get_action(
                 critic,
-                (states.to(dtype=torch.float32) - state_mean) / state_std,
+                act_states,
                 torch.cat(actions, dim=0).to(dtype=torch.float32),
                 torch.cat(rewards, dim=1).to(dtype=torch.float32),
                 target_return.to(dtype=torch.float32),

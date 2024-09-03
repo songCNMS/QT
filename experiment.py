@@ -15,9 +15,12 @@ import time
 
 from decision_transformer.evaluation.evaluate_episodes import evaluate_episode_rtg
 from decision_transformer.training.ql_trainer import Trainer
-from decision_transformer.models.ql_DT import DecisionTransformer, Critic
+from decision_transformer.models.ql_DT import DecisionTransformer, Critic, ReprogrammingLayer
 from logger import logger, setup_logger
+from D4RL.create_dataset import download_dataset
 from torch.utils.tensorboard import SummaryWriter
+from D4RL.create_dataset import LLMEmbModel
+
 
 
 class TrainerConfig:
@@ -184,10 +187,14 @@ def experiment(
 
     state_dim = env.observation_space.shape[0]
     act_dim = env.action_space.shape[0]
+    
 
     # load dataset
 
     dataset_path = f'D4RL/{env_name}-{dataset}-v{dversion}.pkl'
+    if not os.path.exists(dataset_path):
+        download_dataset(pathlib.Path(dataset_path).stem, device)
+        
     with open(dataset_path, 'rb') as f:
         trajectories = pickle.load(f)
 
@@ -235,6 +242,20 @@ def experiment(
 
     # used to reweight sampling so we sample according to timesteps instead of trajectories
     p_sample = traj_lens[sorted_inds] / sum(traj_lens[sorted_inds])
+    
+    if variant["reprogram"]:
+        num_state_dim = state_dim
+        state_dim = 256
+        reprogram_model = ReprogrammingLayer(num_state_dim, state_dim, 768, device)
+        reprogram_model = reprogram_model.to(device=device)
+        # llm_model = LLMEmbModel('GPT2', 768, 12, device)
+        # word_embeddings = llm_model.word_embeddings.to(device)
+    else:
+        num_state_dim = state_dim
+        reprogram_model = None
+        # llm_model = None
+        # word_embeddings = None
+        
 
     def get_batch(batch_size=256, max_len=K):
         batch_inds = np.random.choice(
@@ -250,7 +271,8 @@ def experiment(
             si = random.randint(0, traj['rewards'].shape[0] - 1) 
 
             # get sequences from dataset
-            s.append(traj['observations'][si:si + max_len].reshape(1, -1, state_dim))
+            states = traj['observations'][si:si + max_len].reshape(1, -1, num_state_dim)
+            s.append(states)
             a.append(traj['actions'][si:si + max_len].reshape(1, -1, act_dim))
             target_a.append(traj['actions'][si:si + max_len].reshape(1, -1, act_dim))
             if 'terminals' in traj:
@@ -271,7 +293,7 @@ def experiment(
             
             # padding and state + reward normalization
             tlen = s[-1].shape[1]
-            s[-1] = np.concatenate([np.zeros((1, max_len - tlen, state_dim)), s[-1]], axis=1)
+            s[-1] = np.concatenate([np.zeros((1, max_len - tlen, num_state_dim)), s[-1]], axis=1)
             s[-1] = (s[-1] - state_mean) / state_std
             a[-1] = np.concatenate([np.zeros((1, max_len - tlen, act_dim)), a[-1]], axis=1)
             r[-1] = np.concatenate([np.zeros((1, max_len - tlen, 1)), r[-1]], axis=1)
@@ -293,16 +315,18 @@ def experiment(
         return s, a, r, target_a, d, rtg, timesteps, mask
 
     def eval_episodes(target_rew):
-        def fn(model, critic):
+        def fn(model, critic, reprogram_model, llm_model):
             returns, lengths = [], []
             for _ in range(num_eval_episodes):
                 with torch.no_grad():
                     ret, length = evaluate_episode_rtg(
                         env,
-                        state_dim,
+                        num_state_dim,
                         act_dim,
                         model,
                         critic,
+                        reprogram_model,
+                        llm_model,
                         max_ep_len=max_ep_len,
                         scale=variant['test_scale'],
                         target_return=[t/variant['test_scale'] for t in target_rew],
@@ -321,13 +345,15 @@ def experiment(
                 f'target_{target_rew}_normalized_score': env.get_normalized_score(np.mean(returns)),
             }
         return fn
+    
+   
 
     model = DecisionTransformer(
-        state_dim=state_dim,
-        act_dim=act_dim,
+        state_dim,
+        act_dim,
+        hidden_size=variant['embed_dim'],
         max_length=K,
         max_ep_len=max_ep_len,
-        hidden_size=variant['embed_dim'],
         n_layer=variant['n_layer'],
         n_head=variant['n_head'],
         n_inner=4*variant['embed_dim'],
@@ -341,16 +367,19 @@ def experiment(
         infer_no_q=variant['infer_no_q']
     )
     critic = Critic(
-        state_dim, act_dim, hidden_dim=variant['embed_dim']
+        state_dim, act_dim, 
+        hidden_dim=variant['embed_dim']
     )
 
 
     model = model.to(device=device)
     critic = critic.to(device=device)
+    
 
     trainer = Trainer(
         model=model,
         critic=critic,
+        reprogram=reprogram_model,
         batch_size=batch_size,
         tau=variant['tau'],
         discount=variant['discount'],
@@ -371,7 +400,8 @@ def experiment(
         grad_norm=variant['grad_norm'],
         scale=scale,
         k_rewards=variant['k_rewards'],
-        use_discount=variant['use_discount']
+        use_discount=variant['use_discount'],
+        desc_reg=variant["desc_reg"]
     )
 
 
@@ -444,6 +474,8 @@ if __name__ == '__main__':
     parser.add_argument("--test_scale", type=float, default=None)
     parser.add_argument("--rtg_no_q", action='store_true', default=False)
     parser.add_argument("--infer_no_q", action='store_true', default=False)
+    parser.add_argument("--reprogram", action='store_true', default=False)
+    parser.add_argument("--desc_reg", action='store_true', default=False)
     
     args = parser.parse_args()
 

@@ -6,6 +6,9 @@ import time
 import copy
 from tqdm import tqdm, trange
 from torch.optim.lr_scheduler import CosineAnnealingLR
+from D4RL.create_dataset import LLMEmbModel
+
+
 
 
 class EMA():
@@ -32,6 +35,7 @@ class Trainer:
     def __init__(self, 
                 model, 
                 critic,
+                reprogram,
                 batch_size, 
                 tau,
                 discount,
@@ -52,11 +56,22 @@ class Trainer:
                 grad_norm=1.0,
                 scale=1.0,
                 k_rewards=True,
-                use_discount=True
+                use_discount=True,
+                desc_reg=False,
             ):
         
         self.actor = model
         self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=lr, weight_decay=weight_decay)
+        
+        self.reprogram = reprogram
+        self.desc_reg = desc_reg
+        
+        # if self.desc_reg:
+            # self.reprogram_optimizer = torch.optim.Adam(self.reprogram.parameters(), lr=lr, weight_decay=weight_decay)
+        if self.reprogram is not None:
+            self.llm_model = LLMEmbModel("GPT2", 768, 12, self.reprogram.device)
+        else:
+            self.llm_model = None
 
         self.step_start_ema = step_start_ema
         self.ema = EMA(ema_decay)
@@ -70,6 +85,8 @@ class Trainer:
         if lr_decay:
             self.actor_lr_scheduler = CosineAnnealingLR(self.actor_optimizer, T_max=lr_maxt, eta_min=lr_min)
             self.critic_lr_scheduler = CosineAnnealingLR(self.critic_optimizer, T_max=lr_maxt, eta_min=lr_min)
+            # if self.desc_reg:
+            #     self.reprogram_lr_scheduler = CosineAnnealingLR(self.reprogram_optimizer, T_max=lr_maxt, eta_min=lr_min)
 
         self.batch_size = batch_size
         self.get_batch = get_batch
@@ -102,12 +119,16 @@ class Trainer:
 
         self.actor.train()
         self.critic.train()
+        if self.reprogram is not None:
+            self.reprogram.train()
+            
         loss_metric = {
             'bc_loss': [],
             'ql_loss': [],
             'actor_loss': [],
             'critic_loss': [],
             'target_q_mean': [],
+            'reprogram_loss': [],
         }
         for _ in trange(num_steps):
             loss_metric = self.train_step(log_writer, loss_metric)
@@ -115,8 +136,11 @@ class Trainer:
         if self.lr_decay: 
             self.actor_lr_scheduler.step()
             self.critic_lr_scheduler.step()
+            # if self.desc_reg:
+            #     self.reprogram_lr_scheduler.step()
 
         logger.record_tabular('BC Loss', np.mean(loss_metric['bc_loss']))
+        logger.record_tabular('RP Loss', np.mean(loss_metric['reprogram_loss']))
         logger.record_tabular('QL Loss', np.mean(loss_metric['ql_loss']))
         logger.record_tabular('Actor Loss', np.mean(loss_metric['actor_loss']))
         logger.record_tabular('Critic Loss', np.mean(loss_metric['critic_loss']))
@@ -130,8 +154,10 @@ class Trainer:
 
         self.actor.eval()
         self.critic.eval()
+        if self.reprogram is not None:
+            self.reprogram.eval()
         for eval_fn in self.eval_fns:
-            outputs = eval_fn(self.actor, self.critic_target)
+            outputs = eval_fn(self.actor, self.critic_target, self.reprogram, self.llm_model)
             for k, v in outputs.items():
                 logs[f'evaluation/{k}'] = v
 
@@ -153,6 +179,8 @@ class Trainer:
             logger.record_tabular(k, float(v))
         logger.record_tabular('Current actor learning rate', self.actor_optimizer.param_groups[0]['lr'])
         logger.record_tabular('Current critic learning rate', self.critic_optimizer.param_groups[0]['lr'])
+        # if self.reprogram is not None:
+        #     logger.record_tabular('Current reprogram learning rate', self.reprogram_optimizer.param_groups[0]['lr'])
         logger.dump_tabular()
 
         logs['Best_return_mean'] = best_ret
@@ -169,6 +197,16 @@ class Trainer:
         '''
         states, actions, rewards, action_target, dones, rtg, timesteps, attention_mask = self.get_batch(self.batch_size)
         # action_target = torch.clone(actions)
+        
+        if self.reprogram is not None:
+            num_states = states[:, :, :self.reprogram.num_state_dim]
+            states = self.reprogram(num_states, self.llm_model.word_embeddings, self.llm_model.word_embeddings)
+            if self.desc_reg:
+                emb_states = states[:, :, self.reprogram.num_state_dim:]
+                emb_states = self.reprogram.final_linear_layer(emb_states)
+                emb_loss = F.mse_loss(emb_states[attention_mask.reshape(-1) > 0], states[attention_mask.reshape(-1) > 0])
+                
+        
         batch_size = states.shape[0]
         state_dim = states.shape[-1]
         action_dim = actions.shape[-1]
@@ -248,12 +286,18 @@ class Trainer:
 
         critic_loss = F.mse_loss(current_q1[:, :-1][attention_mask[:, :-1]>0], target_q[:, :-1][attention_mask[:, :-1]>0]) \
             + F.mse_loss(current_q2[:, :-1][attention_mask[:, :-1]>0], target_q[:, :-1][attention_mask[:, :-1]>0]) 
+        
+        if self.desc_reg:
+            critic_loss += emb_loss
 
         self.critic_optimizer.zero_grad()
         critic_loss.backward()
         if self.grad_norm > 0:
             critic_grad_norms = nn.utils.clip_grad_norm_(self.critic.parameters(), max_norm=self.grad_norm, norm_type=2)
         self.critic_optimizer.step()
+
+
+        states = states.detach()
 
         '''Policy Training'''        
         state_preds, action_preds, reward_preds = self.actor.forward(
@@ -288,6 +332,16 @@ class Trainer:
         if self.grad_norm > 0: 
             actor_grad_norms = nn.utils.clip_grad_norm_(self.actor.parameters(), max_norm=self.grad_norm, norm_type=2)
         self.actor_optimizer.step()
+        
+        
+        # if self.reprogram is not None:
+        #     reprogram_loss = actor_loss + critic_loss
+        #     self.reprogram_optimizer.zero_grad()
+        #     reprogram_loss.backward()
+        #     if self.grad_norm > 0:
+        #         regrogram_grad_norms = nn.utils.clip_grad_norm_(self.reprogram.parameters(), max_norm=self.grad_norm, norm_type=2)
+        #     self.reprogram_optimizer.step()
+        
 
         """ Step Target network """
         self.step_ema()
@@ -304,6 +358,10 @@ class Trainer:
             if self.grad_norm > 0:
                 log_writer.add_scalar('Actor Grad Norm', actor_grad_norms.max().item(), self.step)
                 log_writer.add_scalar('Critic Grad Norm', critic_grad_norms.max().item(), self.step)
+                # if self.reprogram is not None:
+                #     log_writer.add_scalar('RP Grad Norm', regrogram_grad_norms.max().item(), self.step)
+                #     log_writer.add_scalar('RP Loss', reprogram_loss.item(), self.step)        
+                
             log_writer.add_scalar('BC Loss', bc_loss.item(), self.step)
             log_writer.add_scalar('QL Loss', q_loss.item(), self.step)
             log_writer.add_scalar('Critic Loss', critic_loss.item(), self.step)
@@ -314,5 +372,9 @@ class Trainer:
         loss_metric['critic_loss'].append(critic_loss.item())
         loss_metric['actor_loss'].append(actor_loss.item())
         loss_metric['target_q_mean'].append(target_q.mean().item())
+        # if self.reprogram is not None:
+        #     loss_metric['reprogram_loss'].append(reprogram_loss.mean().item())
+        # else:
+        loss_metric['reprogram_loss'].append(0)
 
         return loss_metric
