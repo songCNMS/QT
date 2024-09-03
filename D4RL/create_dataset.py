@@ -5,6 +5,8 @@ import collections
 import pickle
 from torch import nn
 import d4rl
+from envs_info.m_envs import get_state_description
+from tqdm import tqdm
 
 from transformers import (
     LlamaConfig,
@@ -122,12 +124,23 @@ class LLMEmbModel(nn.Module):
 
 
 # for env_name in names:
-def download_dataset(env_name, device, with_emb=False):
+def download_dataset(env_name, device, file_loc, with_emb=False):
+    if with_emb:
+        llm_model = LLMEmbModel('GPT2', 768, 12, device).to(device)
     name = env_name
     env = gym.make(name)
     print(env.observation_space)
     dataset = env.get_dataset()
     print(dataset.keys())
+    
+    if 'hopper' in env_name:
+        ori_env_name = "Hopper-v2"
+    elif 'halfcheetah' in env_name:
+        ori_env_name = "HalfCheetah-v2"
+    elif 'walker' in env_name:
+        ori_env_name = "Walker2d-v2"
+    else:
+        raise NotImplemented
 
     N = dataset['rewards'].shape[0]
     data_ = collections.defaultdict(list)
@@ -138,7 +151,7 @@ def download_dataset(env_name, device, with_emb=False):
 
     episode_step = 0
     paths = []
-    for i in range(N):
+    for i in tqdm(range(N)):
         done_bool = bool(dataset['terminals'][i])
         if use_timeouts:
             final_timestep = dataset['timeouts'][i]
@@ -146,7 +159,10 @@ def download_dataset(env_name, device, with_emb=False):
             final_timestep = (episode_step == 1000-1)
         for k in ['observations', 'actions', 'rewards', 'terminals']:
             if k == 'observations' and with_emb:
-                data_[k].append(dataset[k][i])
+                prompt = get_state_description(env, dataset[k][i], ori_env_name)
+                prompt_emb = llm_model.get_emb(prompt)
+                obs_emb = np.concatenate([dataset[k][i], prompt_emb], axis=0)
+                data_[k].append(obs_emb)
             else:
                 data_[k].append(dataset[k][i])
 
@@ -164,5 +180,5 @@ def download_dataset(env_name, device, with_emb=False):
     print(f'Number of samples collected: {num_samples}')
     print(f'Trajectory returns: mean = {np.mean(returns)}, std = {np.std(returns)}, max = {np.max(returns)}, min = {np.min(returns)}')
 
-    with open(f'D4RL/{name}.pkl', 'wb') as f:
+    with open(file_loc, 'wb') as f:
         pickle.dump(paths, f)

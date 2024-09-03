@@ -73,6 +73,7 @@ def evaluate_episode_rtg(
         critic,
         reprogram,
         llm_model,
+        desc_reg=False,
         max_ep_len=2000,
         scale=1000.,
         state_mean=0.,
@@ -106,13 +107,16 @@ def evaluate_episode_rtg(
     timesteps = torch.tensor(0, device=device, dtype=torch.long).reshape(1, 1)
     rewards = [torch.zeros((1, 1), device=device, dtype=torch.float32)]
 
-    sim_states = []
 
     episode_return, episode_length = 0, 0
     with torch.no_grad():
         for t in range(max_ep_len):
-            act_states = (states.to(dtype=torch.float32) - state_mean) / state_std
+            if desc_reg:
+                act_states = torch.nn.F.pad(states, (0, 768), "constant", 0)
+            act_states = (act_states.to(dtype=torch.float32) - state_mean) / state_std
             if reprogram is not None:
+                # if desc_reg:
+                    # act_states = torch.nn.F.pad(act_states, (0, 768), "constant", 0)
                 act_states = reprogram(act_states.reshape(1, states.shape[0], states.shape[1]), llm_model.word_embeddings, llm_model.word_embeddings)[0, :, :]
     
             action = model.get_action(

@@ -185,15 +185,20 @@ def experiment(
     env.seed(variant['seed'])
     set_seed(variant['seed'])
 
-    state_dim = env.observation_space.shape[0]
+    
+    env_state_dim = state_dim = env.observation_space.shape[0]
     act_dim = env.action_space.shape[0]
+    
     
 
     # load dataset
 
-    dataset_path = f'D4RL/{env_name}-{dataset}-v{dversion}.pkl'
+    if variant['desc_reg']:
+        dataset_path = f'D4RL/{env_name}-{dataset}-v{dversion}-desc.pkl'
+    else:
+        dataset_path = f'D4RL/{env_name}-{dataset}-v{dversion}.pkl'
     if not os.path.exists(dataset_path):
-        download_dataset(pathlib.Path(dataset_path).stem, device)
+        download_dataset(f"{env_name}-{dataset}-v{dversion}", device, dataset_path, with_emb=variant['desc_reg'])
         
     with open(dataset_path, 'rb') as f:
         trajectories = pickle.load(f)
@@ -244,14 +249,19 @@ def experiment(
     p_sample = traj_lens[sorted_inds] / sum(traj_lens[sorted_inds])
     
     if variant["reprogram"]:
-        num_state_dim = state_dim
-        state_dim = 256
-        reprogram_model = ReprogrammingLayer(num_state_dim, state_dim, 768, device)
+        num_state_dim = env_state_dim
+        re_state_dim = 256
+        state_dim = re_state_dim
+        data_state_dim = num_state_dim + 768
+        reprogram_model = ReprogrammingLayer(num_state_dim, re_state_dim, 768, device)
         reprogram_model = reprogram_model.to(device=device)
         # llm_model = LLMEmbModel('GPT2', 768, 12, device)
         # word_embeddings = llm_model.word_embeddings.to(device)
     else:
-        num_state_dim = state_dim
+        num_state_dim = env_state_dim
+        re_state_dim = env_state_dim
+        state_dim = re_state_dim
+        data_state_dim = env_state_dim
         reprogram_model = None
         # llm_model = None
         # word_embeddings = None
@@ -271,7 +281,7 @@ def experiment(
             si = random.randint(0, traj['rewards'].shape[0] - 1) 
 
             # get sequences from dataset
-            states = traj['observations'][si:si + max_len].reshape(1, -1, num_state_dim)
+            states = traj['observations'][si:si + max_len].reshape(1, -1, data_state_dim)
             s.append(states)
             a.append(traj['actions'][si:si + max_len].reshape(1, -1, act_dim))
             target_a.append(traj['actions'][si:si + max_len].reshape(1, -1, act_dim))
@@ -293,7 +303,7 @@ def experiment(
             
             # padding and state + reward normalization
             tlen = s[-1].shape[1]
-            s[-1] = np.concatenate([np.zeros((1, max_len - tlen, num_state_dim)), s[-1]], axis=1)
+            s[-1] = np.concatenate([np.zeros((1, max_len - tlen, data_state_dim)), s[-1]], axis=1)
             s[-1] = (s[-1] - state_mean) / state_std
             a[-1] = np.concatenate([np.zeros((1, max_len - tlen, act_dim)), a[-1]], axis=1)
             r[-1] = np.concatenate([np.zeros((1, max_len - tlen, 1)), r[-1]], axis=1)
@@ -321,7 +331,7 @@ def experiment(
                 with torch.no_grad():
                     ret, length = evaluate_episode_rtg(
                         env,
-                        num_state_dim,
+                        env_state_dim,
                         act_dim,
                         model,
                         critic,

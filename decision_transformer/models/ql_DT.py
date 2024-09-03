@@ -25,9 +25,9 @@ class ReprogrammingLayer(nn.Module):
         self.out_projection = nn.Linear(self.d_keys * self.n_heads, self.d_llm)
         self.final_linear_layer = nn.Sequential(
                                     nn.Linear(self.d_llm, 512),
-                                    nn.ReLU(),
+                                    nn.Mish(),
                                     nn.Linear(512, 256),
-                                    nn.ReLU(),
+                                    nn.Mish(),
                                     nn.Linear(256, self.state_dim)
         )
         self.dropout = nn.Dropout(attention_dropout)

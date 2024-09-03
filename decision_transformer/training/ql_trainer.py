@@ -195,16 +195,16 @@ class Trainer:
             Train the model for one step
             states: (batch_size, max_len, state_dim)
         '''
-        states, actions, rewards, action_target, dones, rtg, timesteps, attention_mask = self.get_batch(self.batch_size)
+        ori_states, actions, rewards, action_target, dones, rtg, timesteps, attention_mask = self.get_batch(self.batch_size)
         # action_target = torch.clone(actions)
         
         if self.reprogram is not None:
-            num_states = states[:, :, :self.reprogram.num_state_dim]
+            num_states = ori_states[:, :, :self.reprogram.num_state_dim]
             states = self.reprogram(num_states, self.llm_model.word_embeddings, self.llm_model.word_embeddings)
             if self.desc_reg:
-                emb_states = states[:, :, self.reprogram.num_state_dim:]
+                emb_states = ori_states[:, :, self.reprogram.num_state_dim:]
                 emb_states = self.reprogram.final_linear_layer(emb_states)
-                emb_loss = F.mse_loss(emb_states[attention_mask.reshape(-1) > 0], states[attention_mask.reshape(-1) > 0])
+                emb_loss = ((emb_states-states)**2)[attention_mask > 0].mean()
                 
         
         batch_size = states.shape[0]
@@ -372,9 +372,9 @@ class Trainer:
         loss_metric['critic_loss'].append(critic_loss.item())
         loss_metric['actor_loss'].append(actor_loss.item())
         loss_metric['target_q_mean'].append(target_q.mean().item())
-        # if self.reprogram is not None:
-        #     loss_metric['reprogram_loss'].append(reprogram_loss.mean().item())
-        # else:
-        loss_metric['reprogram_loss'].append(0)
+        if self.desc_reg:
+            loss_metric['reprogram_loss'].append(emb_loss.item())
+        else:
+            loss_metric['reprogram_loss'].append(0)
 
         return loss_metric
