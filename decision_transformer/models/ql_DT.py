@@ -19,10 +19,10 @@ class ReprogrammingLayer(nn.Module):
         self.num_state_dim = num_state_dim
         self.state_dim = state_dim
         
-        self.query_projection = nn.Linear(num_state_dim, self.d_keys * self.n_heads)
-        self.key_projection = nn.Linear(self.d_llm, self.d_keys * self.n_heads)
-        self.value_projection = nn.Linear(self.d_llm, self.d_keys * self.n_heads)
-        self.out_projection = nn.Linear(self.d_keys * self.n_heads, self.d_llm)
+        # self.query_projection = nn.Linear(num_state_dim, self.d_keys * self.n_heads)
+        # self.key_projection = nn.Linear(self.d_llm, self.d_keys * self.n_heads)
+        # self.value_projection = nn.Linear(self.d_llm, self.d_keys * self.n_heads)
+        # self.out_projection = nn.Linear(self.d_keys * self.n_heads, self.d_llm)
         self.final_linear_layer = nn.Sequential(
                                     nn.Linear(num_state_dim, 512),
                                     nn.Mish(),

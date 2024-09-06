@@ -158,6 +158,14 @@ def experiment(
         max_ep_len = 1000
         env_targets = [1., 0.9, 0.8, 0.7, 0.6, 0.5, 0.3]
         scale = 1.
+    elif env_name == 'citylearn':
+        from envs_info.citylearn_env import get_env
+        dversion = 2
+        gym_name = 'citylearn'
+        env = get_env(center=True, env_name=gym_name, seed=variant["seed"])
+        max_ep_len = 720
+        env_targets = [500.0, 400.0, 300.0]
+        scale = 1.
     else:
         raise NotImplementedError
     
@@ -197,6 +205,7 @@ def experiment(
         dataset_path = f'D4RL/{env_name}-{dataset}-v{dversion}-desc.pkl'
     else:
         dataset_path = f'D4RL/{env_name}-{dataset}-v{dversion}.pkl'
+    print(dataset_path)
     if not os.path.exists(dataset_path):
         download_dataset(f"{env_name}-{dataset}-v{dversion}", device, dataset_path, with_emb=variant['desc_reg'])
         
@@ -212,7 +221,7 @@ def experiment(
             path['rewards'][:-1] = 0.
         states.append(path['observations'])
         traj_lens.append(len(path['observations']))
-        returns.append(path['rewards'].sum())
+        returns.append(sum(path['rewards']))
     traj_lens, returns = np.array(traj_lens), np.array(returns)
 
     # used for input normalization
@@ -430,8 +439,9 @@ def experiment(
                 'epoch': iter+1,
                 'actor': trainer.actor.state_dict(),
                 'critic': trainer.critic_target.state_dict(),
-                'reprogram': trainer.reprogram.state_dict(),
             }
+            if trainer.reprogram is not None:
+                state['reprogram'] = trainer.reprogram.state_dict(),
             save_checkpoint(state, os.path.join(variant['save_path'], exp_prefix, 'epoch_{}.pth'.format(iter + 1)))
             best_ret = ret
             best_nor_ret = nor_ret

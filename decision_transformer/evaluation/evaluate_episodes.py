@@ -117,7 +117,7 @@ def evaluate_episode_rtg(
                 act_states = states
             act_states = (act_states.to(dtype=torch.float32) - state_mean) / state_std
             if reprogram is not None:
-                act_states = act_states.reshape(1, act_states.shape[0], act_states.shape[1])[:, :, :state_dim]
+                act_states = act_states.reshape(1, act_states.shape[0], act_states.shape[1])[:, :, :state_dim].to(dtype=torch.float32)
                 act_states = reprogram(act_states, llm_model.word_embeddings, llm_model.word_embeddings)[0, :, :]
     
             action = model.get_action(

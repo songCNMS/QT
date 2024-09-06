@@ -205,7 +205,8 @@ class Trainer:
                 emb_states = ori_states[:, :, self.reprogram.num_state_dim:]
                 # emb_states = self.reprogram.final_linear_layer(emb_states)
                 emb_loss = ((emb_states-states)**2)[attention_mask > 0].mean()
-                
+        else:
+            states = ori_states
         
         batch_size = states.shape[0]
         state_dim = states.shape[-1]
