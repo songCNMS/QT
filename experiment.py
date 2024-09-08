@@ -502,12 +502,16 @@ if __name__ == '__main__':
     parser.add_argument("--infer_no_q", action='store_true', default=False)
     parser.add_argument("--reprogram", action='store_true', default=False)
     parser.add_argument("--desc_reg", action='store_true', default=False)
-    parser.add_argument("--rnd_name", action='store_true', default=False)
+    parser.add_argument("--rnd_name", type=str, default='1')
     args = parser.parse_args()
+    
+    # param_grid = {'eta': [0.001, 0.01, 0.1, 1.0, 5.0, 10.0, 20.0], 
+    #              'grad_norm' : [0.001, 0.01, 0.1, 1.0, 5.0, 10.0, 20.0], 
+    #              'eta3': [0.001, 0.01, 0.1, 1.0, 5.0, 10.0, 20.0]}
     
     param_grid = {'eta': [0.001, 0.01, 0.1, 1.0, 5.0, 10.0, 20.0], 
                  'grad_norm' : [0.001, 0.01, 0.1, 1.0, 5.0, 10.0, 20.0], 
-                 'eta3': [0.001, 0.01, 0.1, 1.0, 5.0, 10.0, 20.0]}
+                 'eta3': [0.001]} #, 0.01, 0.1, 1.0, 5.0, 10.0, 20.0]}
 
     grid = itertools.product(*(list(param_grid.values())))
     results = []
