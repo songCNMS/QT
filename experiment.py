@@ -20,7 +20,8 @@ from logger import logger, setup_logger
 from D4RL.create_dataset import download_dataset
 from torch.utils.tensorboard import SummaryWriter
 from D4RL.create_dataset import LLMEmbModel
-
+import jsonlines
+import itertools
 
 
 class TrainerConfig:
@@ -74,7 +75,7 @@ def experiment(
     seed = variant['seed']
     group_name = f'{exp_prefix}-{env_name}-{dataset}'
     timestr = time.strftime("%y%m%d-%H%M%S")
-    exp_prefix = f'{group_name}-{seed}-{timestr}'
+    exp_prefix = f'{group_name}-{seed}-{timestr}-eta{args.eta}-eta3{args.eta3}-grad{args.grad_norm}'
 
     if env_name == 'hopper':
         dversion = 2
@@ -409,6 +410,7 @@ def experiment(
         max_q_backup=variant['max_q_backup'],
         eta=variant['eta'],
         eta2=variant['eta2'],
+        eta3=variant['eta3'],
         ema_decay=0.995,
         step_start_ema=1000,
         update_ema_every=5,
@@ -452,6 +454,7 @@ def experiment(
             break
     logger.log(f'The final best return mean is {best_ret}')
     logger.log(f'The final best normalized return is {best_nor_ret * 100}')
+    return best_nor_ret
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -482,6 +485,7 @@ if __name__ == '__main__':
     parser.add_argument("--tau", default=0.005, type=float)
     parser.add_argument("--eta", default=1.0, type=float)
     parser.add_argument("--eta2", default=1.0, type=float)
+    parser.add_argument("--eta3", default=1.0, type=float)
     parser.add_argument("--lambda", default=1.0, type=float)
     parser.add_argument("--max_q_backup", action='store_true', default=False)
     parser.add_argument("--lr_decay", action='store_true', default=False)
@@ -498,7 +502,22 @@ if __name__ == '__main__':
     parser.add_argument("--infer_no_q", action='store_true', default=False)
     parser.add_argument("--reprogram", action='store_true', default=False)
     parser.add_argument("--desc_reg", action='store_true', default=False)
-    
+    parser.add_argument("--rnd_name", action='store_true', default=False)
     args = parser.parse_args()
+    
+    param_grid = {'eta': [0.001, 0.01, 0.1, 1.0, 5.0, 10.0, 20.0], 
+                 'grad_norm' : [0.001, 0.01, 0.1, 1.0, 5.0, 10.0, 20.0], 
+                 'eta3': [0.001, 0.01, 0.1, 1.0, 5.0, 10.0, 20.0]}
 
-    experiment(args.exp_name, variant=vars(args))
+    grid = itertools.product(*(list(param_grid.values())))
+    results = []
+    for params in grid:
+        config = vars(args)
+        for i, key in enumerate(param_grid.keys()):
+            config[key] = params[i]
+        score = experiment(args.exp_name, variant=config)
+        params['score'] = score
+        results.append(params)
+        with jsonlines.open(f'grid_search_results_{args.rnd_name}.jsonl', mode='w') as writer:
+            writer.write(results)
+        
