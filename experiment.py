@@ -514,7 +514,7 @@ if __name__ == '__main__':
 
         grid = itertools.product(*(list(param_grid.values())))
         results = []
-        num_runs = 1
+        num_runs = 4
         cmds = collections.defaultdict(list)
         for exp_round, params in enumerate(grid):
             exp_idx = exp_round % num_runs
@@ -522,7 +522,9 @@ if __name__ == '__main__':
             for i, key in enumerate(param_grid.keys()):
                 config[key] = params[i]
             config["rnd_name"] = str(exp_idx)
-            cmd = f"conda activate myenv; CUDA_VISIBLE_DEVICES=0 python experiment.py"
+            config["max_iters"] = [500,400,300,200][exp_idx]
+            config["num_steps_per_iter"] = [2000,3000,4000,5000][exp_idx]
+            cmd = f"conda activate myenv; CUDA_VISIBLE_DEVICES={exp_round%4} python experiment.py"
             for key, val in config.items():
                 if key == "cmd_gen": continue
                 if val is not None:
