@@ -12,6 +12,7 @@ import sys
 import os
 import pathlib
 import time
+import collections
 
 from decision_transformer.evaluation.evaluate_episodes import evaluate_episode_rtg
 from decision_transformer.training.ql_trainer import Trainer
@@ -475,7 +476,7 @@ if __name__ == '__main__':
     parser.add_argument('--lr_min', type=float, default=0.)
     parser.add_argument('--weight_decay', '-wd', type=float, default=1e-4)
     parser.add_argument('--warmup_steps', type=int, default=10000)
-    parser.add_argument('--num_eval_episodes', type=int, default=10)
+    parser.add_argument('--num_eval_episodes', type=int, default=2)
     parser.add_argument('--max_iters', type=int, default=500)
     parser.add_argument('--num_steps_per_iter', type=int, default=1000)
     parser.add_argument('--device', type=str, default='cuda')
@@ -503,25 +504,44 @@ if __name__ == '__main__':
     parser.add_argument("--reprogram", action='store_true', default=False)
     parser.add_argument("--desc_reg", action='store_true', default=False)
     parser.add_argument("--rnd_name", type=str, default='1')
+    parser.add_argument("--cmd_gen", action='store_true', default=False)
     args = parser.parse_args()
     
-    # param_grid = {'eta': [0.001, 0.01, 0.1, 1.0, 5.0, 10.0, 20.0], 
-    #              'grad_norm' : [0.001, 0.01, 0.1, 1.0, 5.0, 10.0, 20.0], 
-    #              'eta3': [0.001, 0.01, 0.1, 1.0, 5.0, 10.0, 20.0]}
-    
-    param_grid = {'eta': [0.001, 0.01, 0.1, 1.0, 5.0, 10.0, 20.0], 
-                 'grad_norm' : [0.001, 0.01, 0.1, 1.0, 5.0, 10.0, 20.0], 
-                 'eta3': [0.001]} #, 0.01, 0.1, 1.0, 5.0, 10.0, 20.0]}
+    if args.cmd_gen:    
+        param_grid = {'eta': [0.001, 0.01, 0.1, 1.0, 5.0, 10.0, 20.0, 100.0], 
+                    'grad_norm' : [1.0, 5.0, 10.0, 20.0, 100.0], 
+                    'eta3': [0.001, 0.01, 0.1, 1.0, 5.0, 10.0, 20.0, 100.0]}
 
-    grid = itertools.product(*(list(param_grid.values())))
-    results = []
-    for params in grid:
-        config = vars(args)
-        for i, key in enumerate(param_grid.keys()):
-            config[key] = params[i]
-        score = experiment(args.exp_name, variant=config)
-        params['score'] = score
-        results.append(params)
-        with jsonlines.open(f'grid_search_results_{args.rnd_name}.jsonl', mode='w') as writer:
-            writer.write(results)
+        grid = itertools.product(*(list(param_grid.values())))
+        results = []
+        num_runs = 1
+        cmds = collections.defaultdict(list)
+        for exp_round, params in enumerate(grid):
+            exp_idx = exp_round % num_runs
+            config = vars(args)
+            for i, key in enumerate(param_grid.keys()):
+                config[key] = params[i]
+            config["rnd_name"] = str(exp_idx)
+            cmd = f"conda activate myenv; CUDA_VISIBLE_DEVICES=0 python experiment.py"
+            for key, val in config.items():
+                if key == "cmd_gen": continue
+                if val is not None:
+                    if isinstance(val, bool):
+                        if val:
+                            cmd += f" --{key}"
+                    else:
+                        cmd += f" --{key} {val}"
+            cmd += ";"
+            cmds[exp_idx].append(cmd)
+            with open(f"run_{exp_idx}.sh", "w") as f:
+                f.writelines(' '.join(cmds[exp_idx]))
         
+        
+            # score = experiment(args.exp_name, variant=config)
+            # params['score'] = score
+            # results.append(params)
+            # with jsonlines.open(f'grid_search_results_{args.rnd_name}.jsonl', mode='w') as writer:
+            #     writer.write(results)
+    else:
+        config = vars(args)
+        experiment(args.exp_name, variant=config)

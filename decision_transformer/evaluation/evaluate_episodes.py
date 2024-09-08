@@ -130,7 +130,7 @@ def evaluate_episode_rtg(
             )
 
             action = action.detach().cpu().numpy().flatten()
-
+            print(f"step: {episode_length}, action: {action}")
             state, reward, done, _ = env.step(action)
             
             actions.insert(-1, torch.from_numpy(action).reshape(1, act_dim).to(device))
