@@ -45,6 +45,7 @@ class Trainer:
                 max_q_backup=False,
                 eta=1.0,
                 eta2=1.0,
+                eta3=1.0,
                 ema_decay=0.995,
                 step_start_ema=1000,
                 update_ema_every=5,
@@ -99,6 +100,7 @@ class Trainer:
         self.grad_norm = grad_norm
         self.eta = eta
         self.eta2 = eta2
+        self.eta3 = eta3
         self.lr_decay = lr_decay
         self.scale = scale
         self.k_rewards = k_rewards
@@ -289,7 +291,7 @@ class Trainer:
             + F.mse_loss(current_q2[:, :-1][attention_mask[:, :-1]>0], target_q[:, :-1][attention_mask[:, :-1]>0]) 
         
         if self.desc_reg:
-            critic_loss += emb_loss
+            critic_loss += self.eta3*emb_loss
 
         self.critic_optimizer.zero_grad()
         critic_loss.backward()
