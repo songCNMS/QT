@@ -269,7 +269,7 @@ class GPTCityLearnWrapper(gym.Env):
         with open(f"{dir_loc}/metric.json", "w") as f:
             json.dump(str(metrics_df), f)
         to_plot_env(self, dir_loc)
-        return metrics_df["average_score"]["value"]
+        return 1.0 - metrics_df["average_score"]["value"]
 
     def step(self, actions):
         prev_reward_obss = [

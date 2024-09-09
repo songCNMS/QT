@@ -160,7 +160,7 @@ def experiment(
         max_ep_len = 1000
         env_targets = [1., 0.9, 0.8, 0.7, 0.6, 0.5, 0.3]
         scale = 1.
-    elif env_name == 'citylearn':
+    elif env_name.startswith('citylearn'):
         from envs_info.citylearn_env import get_env
         dversion = 2
         gym_name = 'citylearn'
@@ -506,14 +506,13 @@ if __name__ == '__main__':
     parser.add_argument("--rnd_name", type=str, default='1')
     parser.add_argument("--cmd_gen", action='store_true', default=False)
     args = parser.parse_args()
-    
+    results = []
     if args.cmd_gen:    
         param_grid = {'eta': [0.001, 0.01, 0.1, 1.0, 5.0, 10.0, 20.0, 100.0], 
                     'grad_norm' : [1.0, 5.0, 10.0, 20.0, 100.0], 
                     'eta3': [0.001, 0.01, 0.1, 1.0, 5.0, 10.0, 20.0, 100.0]}
 
         grid = itertools.product(*(list(param_grid.values())))
-        results = []
         num_runs = 4
         cmds = collections.defaultdict(list)
         for exp_round, params in enumerate(grid):
@@ -524,7 +523,7 @@ if __name__ == '__main__':
             config["rnd_name"] = str(exp_idx)
             config["max_iters"] = [500,400,300,200][exp_idx]
             config["num_steps_per_iter"] = [2000,3000,4000,5000][exp_idx]
-            cmd = f"conda activate myenv; CUDA_VISIBLE_DEVICES={exp_round%4} python experiment.py"
+            cmd = f"CUDA_VISIBLE_DEVICES={exp_round%4} python experiment.py"
             for key, val in config.items():
                 if key == "cmd_gen": continue
                 if val is not None:
@@ -535,15 +534,12 @@ if __name__ == '__main__':
                         cmd += f" --{key} {val}"
             cmd += ";"
             cmds[exp_idx].append(cmd)
-            with open(f"run_{exp_idx}.sh", "w") as f:
+            with open(f"run_{args.env}_{exp_idx}.sh", "w") as f:
                 f.writelines(' '.join(cmds[exp_idx]))
-        
-        
-            # score = experiment(args.exp_name, variant=config)
-            # params['score'] = score
-            # results.append(params)
-            # with jsonlines.open(f'grid_search_results_{args.rnd_name}.jsonl', mode='w') as writer:
-            #     writer.write(results)
     else:
         config = vars(args)
-        experiment(args.exp_name, variant=config)
+        score = experiment(args.exp_name, variant=config)
+        config['score'] = score
+        results.append(config)
+        with jsonlines.open(f'grid_search_results_{args.rnd_name}.jsonl', mode='w') as writer:
+            writer.write(results)
