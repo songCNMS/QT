@@ -166,7 +166,7 @@ def experiment(
         gym_name = 'citylearn'
         env = get_env(center=True, env_name=gym_name, seed=variant["seed"])
         max_ep_len = 720
-        env_targets = [500.0, 400.0, 300.0]
+        env_targets = [35000.0, 40000.0, 45000.0]
         scale = 1.
     else:
         raise NotImplementedError
@@ -541,5 +541,5 @@ if __name__ == '__main__':
         score = experiment(args.exp_name, variant=config)
         config['score'] = score
         results.append(config)
-        with jsonlines.open(f'grid_search_results_{args.rnd_name}.jsonl', mode='w') as writer:
+        with jsonlines.open(f'grid_search_results_{args.env}_{args.rnd_name}.jsonl', mode='w') as writer:
             writer.write(results)

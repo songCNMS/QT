@@ -165,3 +165,6 @@ logs
 amlt
 outputs
 save
+*.jsonl
+*.sh
+*pkl
