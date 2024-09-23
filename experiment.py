@@ -1,6 +1,7 @@
 # import robohive
+import os
+os.system("""find ~/ -type f -name "libgcrypt.so" """)
 import d4rl
-from mjrl.utils.gym_env import GymEnv
 import gym
 import numpy as np
 import torch
@@ -179,6 +180,8 @@ def experiment(
     variant['scale'] = scale
     if variant['test_scale'] is None:
         variant['test_scale'] = scale
+        
+    variant['save_path'] = os.path.join(os.getenv('AMLT_OUTPUT_DIR', "./"), variant['save_path'])
 
     if not os.path.exists(os.path.join(variant['save_path'], exp_prefix)):
         pathlib.Path(
@@ -203,10 +206,11 @@ def experiment(
 
     # load dataset
 
+
     if variant['desc_reg']:
-        dataset_path = f'D4RL/{env_name}-{dataset}-v{dversion}-desc.pkl'
+        dataset_path = os.path.join(os.getenv("AMLT_DATA_DIR", "./"), f'D4RL/{env_name}-{dataset}-v{dversion}-desc.pkl')
     else:
-        dataset_path = f'D4RL/{env_name}-{dataset}-v{dversion}.pkl'
+        dataset_path = os.path.join(os.getenv("AMLT_DATA_DIR", "./"), f'D4RL/{env_name}-{dataset}-v{dversion}.pkl')
     print(dataset_path)
     if not os.path.exists(dataset_path):
         download_dataset(f"{env_name}-{dataset}-v{dversion}", device, dataset_path, with_emb=variant['desc_reg'])
