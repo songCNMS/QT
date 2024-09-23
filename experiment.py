@@ -1,6 +1,6 @@
 # import robohive
 import os
-os.system("""find ~/ -type f -name "libgcrypt.so" """)
+os.environ['LD_LIBRARY_PATH'] = f"/home/aiscuser/.mujoco/mujoco210/bin:{os.environ['LD_LIBRARY_PATH']}"
 import d4rl
 import gym
 import numpy as np
@@ -512,6 +512,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
     results = []
     if args.cmd_gen:    
+        num_gpus = torch.cuda.device_count()
         param_grid = {'eta': [0.001, 0.01, 0.1, 1.0, 5.0, 10.0, 20.0, 100.0], 
                     'grad_norm' : [1.0, 5.0, 10.0, 20.0, 100.0], 
                     'eta3': [0.001, 0.01, 0.1, 1.0, 5.0, 10.0, 20.0, 100.0]}
@@ -527,7 +528,7 @@ if __name__ == '__main__':
             config["rnd_name"] = str(exp_idx)
             config["max_iters"] = [500,400,300,200][exp_idx]
             config["num_steps_per_iter"] = [2000,3000,4000,5000][exp_idx]
-            cmd = f"CUDA_VISIBLE_DEVICES={exp_round%4} python experiment.py"
+            cmd = f"CUDA_VISIBLE_DEVICES={exp_round%num_gpus} python experiment.py"
             for key, val in config.items():
                 if key == "cmd_gen": continue
                 if val is not None:
