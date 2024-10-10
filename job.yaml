@@ -1,40 +1,66 @@
 description: DT with description regularization
 
+
 environment:
-  image: amlt-sing/pytorch-1.8.0-cuda11.1-cudnn8-devel
+  image: lesong/nvidia-cuda:v5
+  username: f2e15e898c154795b7a8c9a9d936095d
+  registry: f2e15e898c154795b7a8c9a9d936095d.azurecr.io
+
   setup:
-    - sudo apt-get update --yes
-    - sudo apt-get install --yes libosmesa6-dev libgl1-mesa-glx libglfw3 libgl1-mesa-dev
-    # - apt-get install libgcrypt20 libgcrypt20-dev
-    - sudo apt-get update -q \
-      && DEBIAN_FRONTEND=noninteractive apt-get install -y \
-      curl \
-      git \
-      libgl1-mesa-dev \
-      libgl1-mesa-glx \
-      libglew-dev \
-      libosmesa6-dev \
-      software-properties-common \
-      net-tools \
-      vim \
-      virtualenv \
-      wget \
-      xpra \
-      xserver-xorg-dev \
-      && apt-get clean \
-      && rm -rf /var/lib/apt/lists/*
-    - alias python='python3.8'
-    - conda update -n base -c defaults conda
-    - conda install -c menpo osmesa --yes
-    - pip install azureml-mlflow tensorboard --user
-    # - cp -R .mujoco /root
+    # - apt-get update -y
+    # - apt-get install -y libosmesa6-dev libgl1-mesa-glx libglfw3 libgl1-mesa-dev
+    # # - apt-get install libgcrypt20 libgcrypt20-dev
+    # - apt-get update -q -y \
+    #   && DEBIAN_FRONTEND=noninteractive apt-get install -y \
+    #   curl \
+    #   git \
+    #   libgl1-mesa-dev \
+    #   libgl1-mesa-glx \
+    #   libglew-dev \
+    #   libosmesa6-dev \
+    #   software-properties-common \
+    #   net-tools \
+    #   vim \
+    #   virtualenv \
+    #   wget \
+    #   xpra \
+    #   xserver-xorg-dev \
+    #   && apt-get clean \
+    #   && rm -rf /var/lib/apt/lists/*
+    # # - alias python='python3.8'
+    # - add-apt-repository -y ppa:ubuntu-toolchain-r/test
+    # - apt-get -y update
+    # - apt-get install -y git-core
+    # - apt install -y build-essential zlib1g-dev libncurses5-dev libgdbm-dev libnss3-dev libssl-dev libreadline-dev libffi-dev wget
+    # - apt install -y python3
+    # - apt-get install python3-pip -y
+    # - apt-get install -y g++-11
     - cp -R .mujoco /home/aiscuser/
+    # - export LD_LIBRARY_PATH=/home/aiscuser/.mujoco/mujoco210/bin:/home/aiscuser/.local/bin
+    # - apt-get install patchelf
+    # - export LD_LIBRARY_PATH=/usr/local/nvidia/lib64:$LD_LIBRARY_PATH
+    # - conda update -y -n base -c defaults conda
+    # - conda install -c menpo osmesa --yes
+    # - pip install --upgrade pip
+    - pip install azureml-mlflow tensorboard --user
+    # - conda env create -f env.yml -y
+    # - conda init; conda activate qt
+    # - conda install -y -c conda-forge mesalib glew glfw
+    - pip install requests==2.23.0
     - pip install -r requirements.txt
+    # - git clone https://github.com/Farama-Foundation/d4rl.git
+    # - cd d4rl; pip install -e .; cd ..
     - pip install git+https://github.com/Farama-Foundation/d4rl@master#egg=d4rl
-    - export LD_LIBRARY_PATH=/home/aiscuser/.mujoco/mujoco210/bin
-    - export LD_LIBRARY_PATH=/usr/local/nvidia/lib64:$LD_LIBRARY_PATH
-    # - pip install -U torch
-    - pip install numpy==1.21.6
+    - pip install packaging==21.3
+    - pip install "dm_control<=1.0.20" "mujoco<=3.1.6"
+    # - cp -R .mujoco /root
+    # - export LD_LIBRARY_PATH=/root/.mujoco/mujoco210/bin:/root/.local/bin:$LD_LIBRARY_PATH
+    # - cp -r /root/.mujoco/mujoco210/bin/* /usr/lib/
+    # # - pip install -U torch
+    # - pip install -r requirements.txt
+    # - pip install git+https://github.com/Farama-Foundation/d4rl@master#egg=d4rl
+    # - pip install numpy==1.21.6
+    # - pip install markupsafe==2.0.1
     
 target:
   service: sing
@@ -49,18 +75,18 @@ data:
 code:
   # local directory of the code. this will be uploaded to the server.
   # $CONFIG_DIR is expanded to the directory of this config file
-  local_dir: $CONFIG_DIR/
+  local_dir: ./
 
 # list of jobs to run, we run 2 jobs in this example
 # jobs:
-# - name: high_lr
+# - name: cl_exp
 #   sku: G1
 #   identity: managed
 #   submit_args:
 #     env:
 #       _AZUREML_SINGULARITY_JOB_UAI: "/subscriptions/e033d461-1923-44a7-872b-78f1d35a86dd/resourcegroups/RAG-WUS/providers/Microsoft.ManagedIdentity/userAssignedIdentities/rag-workspace-eastus-mi"
 #   command:
-#     - export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/aiscuser/.mujoco/mujoco210/bin; python experiment.py --seed 123 --env citylearn --dataset medium-expert --eta 2.0 --grad_norm 5.0 --exp_name qt --save_path ./save/ --max_iters 100 --num_steps_per_iter 10000 --lr_decay --early_stop --k_rewards --use_discount --reprogram --desc_reg --eta3 10.0
+#     - CUDA_VISIBLE_DEVICES=0 python experiment.py --exp_name qt --seed 123 --env walker2d --dataset medium-expert --mode normal --K 20 --pct_traj 1.0 --batch_size 256 --embed_dim 256 --n_layer 4 --n_head 4 --activation_function relu --dropout 0.1 --learning_rate 0.0003 --lr_min 0.0 --weight_decay 0.0001 --warmup_steps 10000 --num_eval_episodes 2 --max_iters 50 --num_steps_per_iter 20000 --device cuda --save_path ./save/ --discount 0.99 --tau 0.005 --eta 0.001 --eta2 1.0 --eta3 0.001 --lambda 1.0 --lr_decay --grad_norm 1.0 --early_stop --early_epoch 100 --k_rewards --use_discount --reward_tune no --reprogram --desc_reg --rnd_name 0; CUDA_VISIBLE_DEVICES=0 python experiment.py --exp_name qt --seed 123 --env walker2d --dataset medium-expert --mode normal --K 20 --pct_traj 1.0 --batch_size 256 --embed_dim 256 --n_layer 4 --n_head 4 --activation_function relu --dropout 0.1 --learning_rate 0.0003 --lr_min 0.0 --weight_decay 0.0001 --warmup_steps 10000 --num_eval_episodes 2 --max_iters 50 --num_steps_per_iter 20000 --device cuda --save_path ./save/ --discount 0.99 --tau 0.005 --eta 0.001 --eta2 1.0 --eta3 5.0 --lambda 1.0 --lr_decay --grad_norm 1.0 --early_stop --early_epoch 100 --k_rewards --use_discount --reward_tune no --reprogram --desc_reg --rnd_name 0; CUDA_VISIBLE_DEVICES=0 python experiment.py --exp_name qt --seed 123 --env walker2d --dataset medium-expert --mode normal --K 20 --pct_traj 1.0 --batch_size 256 --embed_dim 256 --n_layer 4 --n_head 4 --activation_function relu --dropout 0.1 --learning_rate 0.0003 --lr_min 0.0 --weight_decay 0.0001 --warmup_steps 10000 --num_eval_episodes 2 --max_iters 50 --num_steps_per_iter 20000 --device cuda --save_path ./save/ --discount 0.99 --tau 0.005 --eta 0.001 --eta2 1.0 --eta3 0.001 --lambda 1.0 --lr_decay --grad_norm 5.0 --early_stop --early_epoch 100 --k_rewards --use_discount --reward_tune no --reprogram --desc_reg --rnd_name 0
 
 
 search:
@@ -75,7 +101,7 @@ search:
         _AZUREML_SINGULARITY_JOB_UAI: "/subscriptions/e033d461-1923-44a7-872b-78f1d35a86dd/resourcegroups/RAG-WUS/providers/Microsoft.ManagedIdentity/userAssignedIdentities/rag-workspace-eastus-mi"
     sku: 40G1
     command:
-    - python experiment.py --seed 123 --env citylearn --dataset medium-expert --eta {eta} --grad_norm {grad_norm} --exp_name qt --save_path ./save/ --max_iters 500 --num_steps_per_iter 10000 --lr_decay --early_stop --k_rewards --use_discount --reprogram --desc_reg --eta3 {eta3}
+    - python experiment.py --seed 123 --env walker2d --dataset medium-expert --eta {eta} --grad_norm {grad_norm} --exp_name qt --save_path ./save/ --max_iters 20 --num_steps_per_iter 10000 --lr_decay --early_stop --k_rewards --use_discount --reprogram --desc_reg --eta3 {eta3}
   type: hyperdrive  # hyperparameter search type: hyperdrive, random, grid.  Default: hyperdrive
   sampling: grid  # how to explore the hyperparameter space: random, grid or bayesian. Default: bayesian
   max_trials: 256

@@ -1,7 +1,7 @@
 # import robohive
 import os
 os.environ['LD_LIBRARY_PATH'] = f"/home/aiscuser/.mujoco/mujoco210/bin:{os.environ['LD_LIBRARY_PATH']}"
-import d4rl
+# os.environ['LD_LIBRARY_PATH'] = f"/root/.mujoco/mujoco210/bin:{os.environ['LD_LIBRARY_PATH']}"
 import gym
 import numpy as np
 import torch
@@ -24,6 +24,10 @@ from torch.utils.tensorboard import SummaryWriter
 from D4RL.create_dataset import LLMEmbModel
 import jsonlines
 import itertools
+import D4RL
+import d4rl.gym_mujoco
+
+
 
 
 class TrainerConfig:
@@ -95,8 +99,9 @@ def experiment(
         scale = 1000.
     elif env_name == 'walker2d':
         dversion = 2
-        gym_name = f'{env_name}-{dataset}-v{dversion}'
-        env = gym.make(gym_name)
+        gym_name = f"{env_name}-{dataset}-v{dversion}"
+        print(gym_name)
+        env = gym.make("walker2d-medium-expert-v2")
         max_ep_len = 1000
         env_targets = [5000, 4000, 2500]
         scale = 1000.
@@ -526,8 +531,8 @@ if __name__ == '__main__':
             for i, key in enumerate(param_grid.keys()):
                 config[key] = params[i]
             config["rnd_name"] = str(exp_idx)
-            config["max_iters"] = [500,400,300,200][exp_idx]
-            config["num_steps_per_iter"] = [2000,3000,4000,5000][exp_idx]
+            config["max_iters"] = [50,40,30,20][exp_idx]
+            config["num_steps_per_iter"] = [20000,30000,40000,50000][exp_idx]
             cmd = f"CUDA_VISIBLE_DEVICES={exp_round%num_gpus} python experiment.py"
             for key, val in config.items():
                 if key == "cmd_gen": continue
