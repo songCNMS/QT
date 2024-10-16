@@ -14,7 +14,7 @@ def get_state_description(env, obss, env_name):
     context = env_state_contexts[env_name]
     obs_names = env_obs_names[env_name]
     for i, o_name in enumerate(obs_names):
-        context += f"{o_name}: {obss[i]}"
+        context += f"{o_name}: {obss[i]}\n"
     return context
 
 

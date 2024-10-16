@@ -1,4 +1,4 @@
-description: DT with description regularization
+description: DT Data Collection
 
 
 environment:
@@ -90,18 +90,10 @@ search:
         _AZUREML_SINGULARITY_JOB_UAI: "/subscriptions/e033d461-1923-44a7-872b-78f1d35a86dd/resourcegroups/RAG-WUS/providers/Microsoft.ManagedIdentity/userAssignedIdentities/rag-workspace-eastus-mi"
     sku: 80G1
     command:
-    - python experiment.py --seed 123 --env walker2d --dataset medium-expert --eta {eta} --grad_norm {grad_norm} --exp_name qt --save_path ./save/ --max_iters 20 --num_steps_per_iter 10000 --lr_decay --early_stop --k_rewards --use_discount --reprogram --desc_reg --eta3 {eta3}
+    - python llama_feedback.py idx={idx}
   type: hyperdrive  # hyperparameter search type: hyperdrive, random, grid.  Default: hyperdrive
   sampling: grid  # how to explore the hyperparameter space: random, grid or bayesian. Default: bayesian
-  max_trials: 48
-  parallel_trials: 8  # number of trials to run in parallel. Default: equals to max_trials.
+  max_trials: 4
   params:
-    - name: eta
-      values: [0.05, 1.0, 4.0, 10.0]  # or equivalently choice(0.5, 0.9, 0.99)
-    - name: grad_norm
-      # spec: hyperdrive  # the default value
-      values: [0.2, 1.0, 5.0]
-    - name: eta3
-      # spec: hyperdrive  # the default value
-      values: [0.05, 1.0, 4.0, 10.0]
-      
+    - name: idx
+      values: [0, 1, 2, 3]

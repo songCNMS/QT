@@ -29,7 +29,6 @@ RUN apt-get install python3-pip -y
 RUN apt-get install -y g++-11
 ENV LD_LIBRARY_PATH=/usr/local/nvidia/lib64:/home/aiscuser/.mujoco/mujoco210/bin:/home/aiscuser/.local/bin:${LD_LIBRARY_PATH}
 RUN apt-get install patchelf
-
 RUN pip install azureml-mlflow tensorboard
 RUN pip install requests==2.23.0
 RUN pip install -r requirements.txt
