@@ -143,6 +143,8 @@ def get_local_model_resp(model, tokenizer, input):
 if __name__ == "__main__":
     cfg = OmegaConf.from_cli()
     idx = cfg.idx
+    total_split = cfg.split
+    verbose = cfg.get("verbose", False)
     model_name = cfg.get("llm", "Qwen/Qwen2.5-32B-Instruct")
     device = f"cuda"
     model_emb_size = {
@@ -219,6 +221,7 @@ if __name__ == "__main__":
             llama_paths = pickle.load(f)
     
     output_dir_loc = os.path.join(os.getenv('AMLT_OUTPUT_DIR', "./"))
+    os.makedirs(f"{output_dir_loc}/D4RL/", exist_ok=True)
     with open(f"{data_dir_loc}/D4RL/hopper-medium-expert-v2.pkl", "rb") as f:
         paths = pickle.load(f)
         rewards_list = [np.sum(path["rewards"]) for path in paths]    
@@ -226,7 +229,7 @@ if __name__ == "__main__":
         path_num = 0
         existing_path_num = len(llama_paths)
         for i, path in tqdm(enumerate(paths)):
-            if i % 4 != idx: continue
+            if i % total_split != idx: continue
             path_reward = np.sum(path["rewards"])
             if path_reward <= path_reward_thd: continue
             if path_num < existing_path_num:
@@ -240,7 +243,7 @@ if __name__ == "__main__":
             for j, obs in tqdm(enumerate(path["observations"]), leave=False):
                 input = question_template.substitute(obs=str(obs))
                 prompt = get_local_model_resp(model, tokenizer, input)
-                print(prompt)
+                if verbose: print(prompt)
                 # if prompt == "ERROR":
                 #     continue
                 prompt_emb = llmemb_model.get_emb(prompt)
@@ -251,16 +254,18 @@ if __name__ == "__main__":
                 new_terminals.append(path["terminals"][j])
                 prompts.append(prompt)
                 # time.sleep(2)
-            path = {
-                "observations": np.array(new_obss),
-                "rewards": np.array(new_rewards),
-                "actions": np.array(new_actions),
-                "terminals": np.array(new_terminals),
-                "prompts": prompts}
-            llama_paths.append(path)
-            
-            with open(f"{output_dir_loc}/D4RL/hopper-medium-expert-v2-ldesc_{idx}.pkl", "wb") as fw:
-                pickle.dump(llama_paths, fw)
+                
+                if j == len(path["observations"]) - 1 or j % 10 == 0:
+                    path = {
+                        "observations": np.array(new_obss),
+                        "rewards": np.array(new_rewards),
+                        "actions": np.array(new_actions),
+                        "terminals": np.array(new_terminals),
+                        "prompts": prompts}
+                    llama_paths.append(path)
+                    
+                    with open(f"{output_dir_loc}/D4RL/hopper-medium-expert-v2-ldesc_{idx}.pkl", "wb") as fw:
+                        pickle.dump(llama_paths, fw)
                 
         
 

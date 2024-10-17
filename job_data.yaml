@@ -90,10 +90,10 @@ search:
         _AZUREML_SINGULARITY_JOB_UAI: "/subscriptions/e033d461-1923-44a7-872b-78f1d35a86dd/resourcegroups/RAG-WUS/providers/Microsoft.ManagedIdentity/userAssignedIdentities/rag-workspace-eastus-mi"
     sku: 80G1
     command:
-    - python llama_feedback.py idx={idx}
+    - python llama_feedback.py idx={idx} split=16 verbose=False
   type: hyperdrive  # hyperparameter search type: hyperdrive, random, grid.  Default: hyperdrive
   sampling: grid  # how to explore the hyperparameter space: random, grid or bayesian. Default: bayesian
-  max_trials: 4
+  max_trials: 16
   params:
     - name: idx
-      values: [0, 1, 2, 3]
+      values: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
